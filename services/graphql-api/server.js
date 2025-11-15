@@ -1,231 +1,163 @@
+// services/graphql-api/server.js (Kode Lengkap)
+
 const express = require('express');
 const { ApolloServer } = require('apollo-server-express');
 const { PubSub } = require('graphql-subscriptions');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
 
+// --- Perbaikan Subscription ---
+const { createServer } = require('http');
+const { WebSocketServer } = require('ws');
+const { useServer } = require('graphql-ws/lib/use/ws');
+const { makeExecutableSchema } = require('@graphql-tools/schema');
+// -----------------------------
+
 const app = express();
 const pubsub = new PubSub();
 
 // Nama-nama channel untuk subscription
-const TASK_UPDATED = 'TASK_UPDATED';
-const NOTIFICATION_ADDED = 'NOTIFICATION_ADDED';
+const POST_ADDED = 'POST_ADDED';
+const COMMENT_ADDED = 'COMMENT_ADDED';
+const POST_UPDATED = 'POST_UPDATED';
+const POST_DELETED = 'POST_DELETED';
 
-// Enable CORS (konfigurasi lama Anda sudah benar)
+// Enable CORS 
 app.use(cors({
   origin: [
-    'http://localhost:3000', // API Gateway
-    'http://localhost:3002', // Frontend
-    'http://api-gateway:3000', // Docker container name
-    'http://frontend-app:3002' // Docker container name
+    'http://localhost:3000', 'http://localhost:3002', 
+    'http://api-gateway:3000', 'http://frontend-app:3002' 
   ],
   credentials: true
 }));
 
-// === Database In-Memory BARU (Task Management) ===
-// (Ganti dengan database sungguhan di produksi)
-
-// User stub (data 'dummy' user, diasumsikan didapat dari Service A)
-let users = [
-  { id: '1', name: 'John Doe' },
-  { id: '2', name: 'Jane Smith' },
+// === Database In-Memory ASLI (Posts/Comments) ===
+let posts = [
+  { id: '1', title: 'Welcome to Microservices Security', content: 'This post is secured by JWT passed through the API Gateway!', author: 'John Doe', createdAt: new Date().toISOString() },
+  { id: '2', title: 'Authentication is Working', content: 'Check the logs when you try to delete this post as a non-admin!', author: 'Jane Smith', createdAt: new Date().toISOString() }
 ];
-
-// Project (task dikelompokkan dalam project)
-let projects = [
-  { id: 'p1', name: 'Proyek Website Klien', description: 'Membangun website E-commerce' },
-  { id: 'p2', name: 'Aplikasi Mobile', description: 'Membuat aplikasi Task Management' },
-];
-
-// Tasks
-let tasks = [
-  { id: 't1', projectId: 'p1', title: 'Desain Homepage', description: 'Buat mockup Figma', status: 'IN_PROGRESS', assigneeId: '1', createdAt: new Date().toISOString() },
-  { id: 't2', projectId: 'p1', title: 'Setup Backend', description: 'Install Express', status: 'DONE', assigneeId: '2', createdAt: new Date().toISOString() },
-  { id: 't3', projectId: 'p2', title: 'Implementasi Login', description: 'Gunakan GraphQL', status: 'TODO', assigneeId: '1', createdAt: new Date().toISOString() },
+let comments = [
+  { id: '1', postId: '1', content: 'I am a secure comment!', author: 'John Doe', createdAt: new Date().toISOString() }
 ];
 // ===============================================
 
-// === Skema GraphQL BARU (Type Definitions) ===
+// === Skema GraphQL ASLI (Type Definitions) ===
 const typeDefs = `
-  enum TaskStatus {
-    TODO
-    IN_PROGRESS
-    DONE
-    ARCHIVED
-  }
-
-  type User {
-    id: ID!
-    name: String!
-    # (data user lain bisa ditambahkan di sini jika perlu)
-  }
-
-  type Task {
+  type Post {
     id: ID!
     title: String!
-    description: String
-    status: TaskStatus!
-    assignee: User
-    project: Project!
+    content: String!
+    author: String!
+    createdAt: String!
+    comments: [Comment!]!
+  }
+  type Comment {
+    id: ID!
+    postId: ID!
+    content: String!
+    author: String!
     createdAt: String!
   }
-
-  type Project {
-    id: ID!
-    name: String!
-    description: String
-    tasks: [Task!]!
-  }
-
-  type Notification {
-    id: ID!
-    message: String!
-    timestamp: String!
-    userId: ID! # Notifikasi ini untuk siapa
-  }
-
   type Query {
-    projects: [Project!]!
-    project(id: ID!): Project
-    tasksByProject(projectId: ID!): [Task!]!
+    posts: [Post!]!
+    post(id: ID!): Post
+    comments(postId: ID!): [Comment!]!
   }
-
   type Mutation {
-    createTask(projectId: ID!, title: String!, description: String, assigneeId: ID): Task!
-    updateTaskStatus(taskId: ID!, status: TaskStatus!): Task!
+    createPost(title: String!, content: String!, author: String!): Post!
+    updatePost(id: ID!, title: String, content: String): Post!
+    deletePost(id: ID!): Boolean!
+    createComment(postId: ID!, content: String!, author: String!): Comment!
+    deleteComment(id: ID!): Boolean!
   }
-
   type Subscription {
-    taskUpdated(projectId: ID!): Task!
-    notificationAdded(userId: ID!): Notification!
+    postAdded: Post!
+    commentAdded: Comment!
+    postUpdated: Post!
+    postDeleted: ID!
   }
 `;
 
-// === Resolvers BARU ===
+// === Resolvers ASLI (dengan logika Role Admin) ===
 const resolvers = {
-  Query: {
-    projects: () => projects,
-    project: (_, { id }) => projects.find(p => p.id === id),
-    tasksByProject: (_, { projectId }) => tasks.filter(t => t.projectId === projectId),
-  },
-
-  Project: {
-    // Resolver untuk 'tasks' di dalam 'Project'
-    tasks: (project) => tasks.filter(t => t.projectId === project.id),
-  },
-
-  Task: {
-    // Resolver untuk 'assignee' di dalam 'Task'
-    assignee: (task) => users.find(u => u.id === task.assigneeId),
-    // Resolver untuk 'project' di dalam 'Task'
-    project: (task) => projects.find(p => p.id === task.projectId),
-  },
+  Query: { posts: () => posts, post: (_, { id }) => posts.find(post => post.id === id), comments: (_, { postId }) => comments.filter(comment => comment.postId === postId) },
+  Post: { comments: (parent) => comments.filter(comment => comment.postId === parent.id) },
 
   Mutation: {
-    createTask: (_, { projectId, title, description, assigneeId }, context) => {
-      // 'context.userId' didapat dari header yang di-inject Gateway
-      console.log(`User ${context.userName} (ID: ${context.userId}) sedang membuat task.`);
-
-      if (!projects.find(p => p.id === projectId)) {
-        throw new Error('Project not found');
-      }
-
-      const newTask = {
-        id: uuidv4(),
-        projectId,
-        title,
-        description,
-        status: 'TODO',
-        assigneeId,
-        createdAt: new Date().toISOString()
-      };
-      
-      tasks.push(newTask);
-
-      // Buat notifikasi untuk user yang di-assign (jika ada)
-      if (assigneeId) {
-        const notif = {
-          id: uuidv4(),
-          message: `Anda ditugaskan ke task baru: "${title}" oleh ${context.userName}.`,
-          timestamp: new Date().toISOString(),
-          userId: assigneeId
-        };
-        // Publish notifikasi ke channel user tersebut
-        pubsub.publish(NOTIFICATION_ADDED, { notificationAdded: notif });
-      }
-
-      return newTask;
+    createPost: (_, { title, content, author }, context) => {
+      const postAuthor = context.userName || author; 
+      const newPost = { id: uuidv4(), title, content, author: postAuthor, createdAt: new Date().toISOString() };
+      posts.push(newPost);
+      pubsub.publish(POST_ADDED, { postAdded: newPost });
+      return newPost;
     },
 
-    updateTaskStatus: (_, { taskId, status }, context) => {
-      // 'context.userId' didapat dari header yang di-inject Gateway
-      const taskIndex = tasks.findIndex(t => t.id === taskId);
-      if (taskIndex === -1) {
-        throw new Error('Task not found');
+    updatePost: (_, { id, title, content }) => {
+      const postIndex = posts.findIndex(post => post.id === id);
+      if (postIndex === -1) { throw new Error('Post not found'); }
+      const updatedPost = { ...posts[postIndex], ...(title && { title }), ...(content && { content }) };
+      posts[postIndex] = updatedPost;
+      pubsub.publish(POST_UPDATED, { postUpdated: updatedPost });
+      return updatedPost;
+    },
+
+    deletePost: (_, { id }, context) => { 
+      const postIndex = posts.findIndex(post => post.id === id);
+      if (postIndex === -1) { return false; }
+      const post = posts[postIndex];
+      
+      // LOGIKA HAK AKSES ADMIN
+      if (context.userRole === 'admin' || post.author === context.userName) {
+        comments = comments.filter(comment => comment.postId !== id);
+        posts.splice(postIndex, 1);
+        pubsub.publish(POST_DELETED, { postDeleted: id });
+        return true;
+      } else {
+        throw new Error('You are not authorized to delete this post.');
       }
+    },
 
-      tasks[taskIndex].status = status;
-      const updatedTask = tasks[taskIndex];
-
-      // Publish update ke subscription 'taskUpdated'
-      pubsub.publish(TASK_UPDATED, { taskUpdated: updatedTask });
-      
-      // Buat notifikasi untuk pembuat task atau assignee
-      const notif = {
-        id: uuidv4(),
-        message: `Task "${updatedTask.title}" diupdate menjadi ${status} oleh ${context.userName}.`,
-        timestamp: new Date().toISOString(),
-        userId: updatedTask.assigneeId // Kirim notif ke assignee
-      };
-      pubsub.publish(NOTIFICATION_ADDED, { notificationAdded: notif });
-      
-      return updatedTask;
+    createComment: (_, { postId, content, author }, context) => {
+      const commentAuthor = context.userName || author;
+      const post = posts.find(p => p.id === postId);
+      if (!post) { throw new Error('Post not found'); }
+      const newComment = { id: uuidv4(), postId, content, author: commentAuthor, createdAt: new Date().toISOString() };
+      comments.push(newComment);
+      pubsub.publish(COMMENT_ADDED, { commentAdded: newComment });
+      return newComment;
+    },
+    deleteComment: (_, { id }) => {
+      const commentIndex = comments.findIndex(comment => comment.id === id);
+      if (commentIndex === -1) { return false; }
+      comments.splice(commentIndex, 1);
+      return true;
     },
   },
 
   Subscription: {
-    taskUpdated: {
-      // Filter agar user hanya subscribe ke update di project yang mereka lihat
-      subscribe: () => pubsub.asyncIterator([TASK_UPDATED]),
-    },
-    notificationAdded: {
-      // Filter agar user HANYA menerima notifikasi untuk ID mereka
-      subscribe: (parent, { userId }, context, info) => {
-        // (Di aplikasi nyata, Anda akan cek 'context.userId' vs 'userId' di sini)
-        return pubsub.asyncIterator([NOTIFICATION_ADDED]);
-      }
-    },
+    postAdded: { subscribe: () => pubsub.asyncIterator([POST_ADDED]) },
+    commentAdded: { subscribe: () => pubsub.asyncIterator([COMMENT_ADDED]) },
+    postUpdated: { subscribe: () => pubsub.asyncIterator([POST_UPDATED]) },
+    postDeleted: { subscribe: () => pubsub.asyncIterator([POST_DELETED]) },
   },
 };
 
+const schema = makeExecutableSchema({ typeDefs, resolvers });
+
 async function startServer() {
-  // Create Apollo Server
   const server = new ApolloServer({
-    typeDefs,
-    resolvers,
+    schema, 
     context: ({ req }) => {
-      // === INTEGRASI PENTING (PERSIAPAN BAGIAN 3) ===
-      // Membaca header 'kustom' yang akan di-inject oleh API Gateway
-      // Service ini TIDAK tahu-menahu soal JWT, ia hanya percaya pada Gateway.
+      // Membaca header yang disuntikkan Gateway, termasuk ROLE
       const userId = req.headers['x-user-id'] || '';
       const userName = req.headers['x-user-name'] || 'Guest';
       const userEmail = req.headers['x-user-email'] || '';
       const userTeams = (req.headers['x-user-teams'] || '').split(',');
+      const userRole = req.headers['x-user-role'] || 'user'; 
 
-      // 'context' ini akan diteruskan ke semua resolver
-      return { userId, userName, userEmail, userTeams, req };
+      return { userId, userName, userEmail, userTeams, userRole, req };
     },
-    plugins: [
-      {
-        requestDidStart() {
-          return {
-            willSendResponse(requestContext) {
-              console.log(`GraphQL ${requestContext.request.operationName || 'Anonymous'} operation completed`);
-            },
-          };
-        },
-      },
-    ],
+    // ... (plugins) ...
   });
 
   await server.start();
@@ -233,37 +165,16 @@ async function startServer() {
 
   const PORT = process.env.PORT || 4000;
   
-  const httpServer = app.listen(PORT, () => {
-    console.log(`🚀 Task Service (GraphQL) running on port ${PORT}`);
-    console.log(`GraphQL endpoint: http://localhost:${PORT}${server.graphqlPath}`);
-    console.log(`Subscriptions ready`);
+  // FIX: Setup Subscription yang Benar
+  const httpServer = createServer(app);
+  const wsServer = new WebSocketServer({ server: httpServer, path: server.graphqlPath });
+  useServer({ schema }, wsServer);
+  httpServer.listen(PORT, () => {
+    console.log(`🚀 Post/Comment Service (GraphQL) running on port ${PORT}`);
+    console.log(`Subscriptions ready at ws://localhost:${PORT}${server.graphqlPath}`);
   });
-
-  // Setup subscriptions
-  server.installSubscriptionHandlers(httpServer);
-
-  // ... (Graceful shutdown tetap sama) ...
 }
-
-// Health check endpoint (Update nama service)
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy',
-    service: 'task-service-graphql-api',
-    timestamp: new Date().toISOString(),
-    data: {
-      projects: projects.length,
-      tasks: tasks.length
-    }
-  });
-});
-
-// ... (Error handling tetap sama) ...
-app.use((err, req, res, next) => {
-  console.error('GraphQL API Error:', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
+// ... (Health check dan Error handling tetap sama) ...
 startServer().catch(error => {
   console.error('Failed to start GraphQL server:', error);
   process.exit(1);

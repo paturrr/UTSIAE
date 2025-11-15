@@ -1,3 +1,5 @@
+// frontend-app/src/lib/api.ts (Kode Lengkap)
+
 import axios from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:3000';
@@ -9,14 +11,10 @@ export const apiClient = axios.create({
   },
 });
 
-// === INTERCEPTOR BARU ===
-// Ini akan 'mencegat' setiap request SEBELUM dikirim
+// === INTERCEPTOR ===
 apiClient.interceptors.request.use(
   (config) => {
-    // Ambil token dari local storage
-    // (Kita asumsikan token disimpan di sini setelah login)
     const token = localStorage.getItem('authToken');
-    
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
@@ -28,9 +26,8 @@ apiClient.interceptors.request.use(
 );
 // =========================
 
-// --- API Service BARU untuk Autentikasi ---
+// --- API Service untuk Autentikasi ---
 export const authApi = {
-  // Tipe data 'any' untuk password agar simpel
   login: (data: { email: string; password: any }) => 
     apiClient.post('/api/auth/login', data),
   
@@ -39,12 +36,15 @@ export const authApi = {
 };
 // ===========================================
 
-// User API calls (ini masih bisa dipakai, dan sekarang otomatis ter-autentikasi!)
+// User API calls (Dibutuhkan untuk Admin Panel)
 export const userApi = {
   getUsers: () => apiClient.get('/api/users'),
   getUser: (id: string) => apiClient.get(`/api/users/${id}`),
-  // Hapus createUser, karena sudah diganti 'register'
   updateUser: (id: string, userData: { name?: string; email?: string; age?: number }) => 
     apiClient.put(`/api/users/${id}`, userData),
   deleteUser: (id: string) => apiClient.delete(`/api/users/${id}`),
+
+  // ADMIN ENDPOINTS
+  changeUserRole: (id: string, role: 'admin' | 'user') => 
+    apiClient.put(`/api/users/${id}/role`, { role }),
 };

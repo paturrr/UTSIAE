@@ -1,3 +1,5 @@
+// services/rest-api/routes/auth.js (Kode Lengkap)
+
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -8,8 +10,7 @@ const { validateUser } = require('../middleware/validation');
 
 const router = express.Router();
 
-// Database user in-memory (pindahkan ke database sungguhan nanti)
-// Kita buat ini 'global' agar bisa diakses file rute lain (untuk demo)
+// Database user in-memory: JANE SMITH = ADMIN, PWD = 123456
 if (!global.users) {
   global.users = [
     {
@@ -17,8 +18,8 @@ if (!global.users) {
       name: 'John Doe',
       email: 'john@example.com',
       age: 30,
-      role: 'admin',
-      passwordHash: '$2a$10$f.bZ/F.N..e.3.i9A.crA.2.W.3.j.gqY.1.R.2.g.3.k.4', // Hash dummy
+      role: 'user',
+      passwordHash: '$2a$10$.91iziEVWTK2toYSAX0rJ.gEzvFlJGfY/d0cL84W8pDbXT3vQYQAK',
       teams: ['t1'],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -28,8 +29,8 @@ if (!global.users) {
       name: 'Jane Smith',
       email: 'jane@example.com',
       age: 25,
-      role: 'user',
-      passwordHash: '$2a$10$f.bZ/F.N..e.3.i9A.crA.2.W.3.j.gqY.1.R.2.g.3.k.4', // Hash dummy
+      role: 'admin', // <-- ROLE ADMIN
+      passwordHash: '$2a$10$.91iziEVWTK2toYSAX0rJ.gEzvFlJGfY/d0cL84W8pDbXT3vQYQAK',
       teams: ['t1'],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -43,13 +44,16 @@ const privateKey = fs.readFileSync(path.join(__dirname, '../private.key'), 'utf8
 
 // POST /api/auth/register - Registrasi user baru
 router.post('/register', validateUser, async (req, res) => {
-  // 'validateUser' sudah kita update di langkah 3
-  const { name, email, age, password, role = 'user' } = req.body; 
+  const { name, email, age, password } = req.body; 
 
   // Cek jika email sudah ada
   if (global.users.find(u => u.email === email)) {
     return res.status(409).json({ error: 'Email already exists' });
   }
+  
+  // LOGIKA ADMIN PERTAMA
+  const hasAdmin = global.users.some(u => u.role === 'admin');
+  const role = hasAdmin ? 'user' : 'admin';
 
   // Hash password
   const salt = await bcrypt.genSalt(10);
@@ -60,9 +64,9 @@ router.post('/register', validateUser, async (req, res) => {
     name,
     email,
     age,
-    passwordHash, // Simpan hash, bukan password asli
+    passwordHash, 
     role,
-    teams: [],
+    teams: ['t1'],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -70,7 +74,7 @@ router.post('/register', validateUser, async (req, res) => {
   global.users.push(newUser);
 
   res.status(201).json({
-    message: 'User created successfully',
+    message: `User created successfully${role === 'admin' ? ' as ADMIN' : ''}`,
     user: { id: newUser.id, name: newUser.name, email: newUser.email }
   });
 });
@@ -97,7 +101,7 @@ router.post('/login', async (req, res) => {
     email: user.email,
     name: user.name,
     role: user.role,
-    teams: user.teams // Sertakan tim user di dalam token
+    teams: user.teams 
   };
 
   // Buat token menggunakan private key, berlaku 1 jam
@@ -113,10 +117,9 @@ router.post('/login', async (req, res) => {
   });
 });
 
-// GET /api/auth/public-key - Endpoint untuk API Gateway (nanti)
+// GET /api/auth/public-key - Endpoint untuk API Gateway
 router.get('/public-key', (req, res) => {
   try {
-    // Baca file public key yang sudah kita buat
     const publicKey = fs.readFileSync(path.join(__dirname, '../public.key'), 'utf8');
     res.type('text/plain').send(publicKey);
   } catch (err) {
