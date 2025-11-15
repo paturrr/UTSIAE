@@ -18,7 +18,8 @@ if (!global.users) {
       name: 'John Doe',
       email: 'john@example.com',
       age: 30,
-      role: 'user',
+      role: 'user', 
+      // Hash untuk password: 123456
       passwordHash: '$2a$10$.91iziEVWTK2toYSAX0rJ.gEzvFlJGfY/d0cL84W8pDbXT3vQYQAK',
       teams: ['t1'],
       createdAt: new Date().toISOString(),
@@ -29,7 +30,8 @@ if (!global.users) {
       name: 'Jane Smith',
       email: 'jane@example.com',
       age: 25,
-      role: 'admin', // <-- ROLE ADMIN
+      role: 'admin', // <-- ROLE ADMIN DUMMY
+      // Hash untuk password: 123456
       passwordHash: '$2a$10$.91iziEVWTK2toYSAX0rJ.gEzvFlJGfY/d0cL84W8pDbXT3vQYQAK',
       teams: ['t1'],
       createdAt: new Date().toISOString(),
@@ -46,14 +48,13 @@ const privateKey = fs.readFileSync(path.join(__dirname, '../private.key'), 'utf8
 router.post('/register', validateUser, async (req, res) => {
   const { name, email, age, password } = req.body; 
 
-  // Cek jika email sudah ada
   if (global.users.find(u => u.email === email)) {
     return res.status(409).json({ error: 'Email already exists' });
   }
-  
+
   // LOGIKA ADMIN PERTAMA
   const hasAdmin = global.users.some(u => u.role === 'admin');
-  const role = hasAdmin ? 'user' : 'admin';
+  const role = hasAdmin ? 'user' : 'admin'; 
 
   // Hash password
   const salt = await bcrypt.genSalt(10);
@@ -83,13 +84,11 @@ router.post('/register', validateUser, async (req, res) => {
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
-  // Cari user
   const user = global.users.find(u => u.email === email);
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials (user not found)' });
   }
 
-  // Cek password
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   if (!isMatch) {
     return res.status(401).json({ error: 'Invalid credentials (password mismatch)' });
@@ -104,7 +103,6 @@ router.post('/login', async (req, res) => {
     teams: user.teams 
   };
 
-  // Buat token menggunakan private key, berlaku 1 jam
   const token = jwt.sign(
     payload,
     privateKey,

@@ -1,4 +1,4 @@
-// services/graphql-api/server.js (Kode Lengkap)
+// services/graphql-api/server.js (Kode Lengkap & Stabil)
 
 const express = require('express');
 const { ApolloServer } = require('apollo-server-express');
@@ -6,23 +6,21 @@ const { PubSub } = require('graphql-subscriptions');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
 
-// --- Perbaikan Subscription ---
+// --- Impor untuk FIX Subscription ---
 const { createServer } = require('http');
 const { WebSocketServer } = require('ws');
 const { useServer } = require('graphql-ws/lib/use/ws');
 const { makeExecutableSchema } = require('@graphql-tools/schema');
-// -----------------------------
+// ------------------------------------
 
 const app = express();
 const pubsub = new PubSub();
 
-// Nama-nama channel untuk subscription
 const POST_ADDED = 'POST_ADDED';
 const COMMENT_ADDED = 'COMMENT_ADDED';
 const POST_UPDATED = 'POST_UPDATED';
 const POST_DELETED = 'POST_DELETED';
 
-// Enable CORS 
 app.use(cors({
   origin: [
     'http://localhost:3000', 'http://localhost:3002', 
@@ -41,7 +39,7 @@ let comments = [
 ];
 // ===============================================
 
-// === Skema GraphQL ASLI (Type Definitions) ===
+// === Skema GraphQL ASLI (Type Definitions) - DENGAN INPUT AUTHOR ===
 const typeDefs = `
   type Post {
     id: ID!
@@ -64,10 +62,10 @@ const typeDefs = `
     comments(postId: ID!): [Comment!]!
   }
   type Mutation {
-    createPost(title: String!, content: String!, author: String!): Post!
+    createPost(title: String!, content: String!, author: String!): Post! 
     updatePost(id: ID!, title: String, content: String): Post!
     deletePost(id: ID!): Boolean!
-    createComment(postId: ID!, content: String!, author: String!): Comment!
+    createComment(postId: ID!, content: String!, author: String!): Comment! 
     deleteComment(id: ID!): Boolean!
   }
   type Subscription {
@@ -84,8 +82,11 @@ const resolvers = {
   Post: { comments: (parent) => comments.filter(comment => comment.postId === parent.id) },
 
   Mutation: {
-    createPost: (_, { title, content, author }, context) => {
-      const postAuthor = context.userName || author; 
+    // RESOLVER createPost - MENGAMBIL AUTHOR DARI INPUT
+    createPost: (_, { title, content, author }, context) => { // <-- AUTHOR DIKEMBALIKAN
+      const postAuthor = author; 
+      if (!context.userId) { throw new Error('Authentication required to create a post.'); }
+
       const newPost = { id: uuidv4(), title, content, author: postAuthor, createdAt: new Date().toISOString() };
       posts.push(newPost);
       pubsub.publish(POST_ADDED, { postAdded: newPost });
@@ -117,8 +118,11 @@ const resolvers = {
       }
     },
 
-    createComment: (_, { postId, content, author }, context) => {
-      const commentAuthor = context.userName || author;
+    // RESOLVER createComment - MENGAMBIL AUTHOR DARI INPUT
+    createComment: (_, { postId, content, author }, context) => { // <-- AUTHOR DIKEMBALIKAN
+      const commentAuthor = author;
+      if (!context.userId) { throw new Error('Authentication required to comment.'); }
+
       const post = posts.find(p => p.id === postId);
       if (!post) { throw new Error('Post not found'); }
       const newComment = { id: uuidv4(), postId, content, author: commentAuthor, createdAt: new Date().toISOString() };
@@ -126,6 +130,7 @@ const resolvers = {
       pubsub.publish(COMMENT_ADDED, { commentAdded: newComment });
       return newComment;
     },
+
     deleteComment: (_, { id }) => {
       const commentIndex = comments.findIndex(comment => comment.id === id);
       if (commentIndex === -1) { return false; }
@@ -150,7 +155,7 @@ async function startServer() {
     context: ({ req }) => {
       // Membaca header yang disuntikkan Gateway, termasuk ROLE
       const userId = req.headers['x-user-id'] || '';
-      const userName = req.headers['x-user-name'] || 'Guest';
+      const userName = req.headers['x-user-name'] || 'Guest'; 
       const userEmail = req.headers['x-user-email'] || '';
       const userTeams = (req.headers['x-user-teams'] || '').split(',');
       const userRole = req.headers['x-user-role'] || 'user'; 
@@ -171,10 +176,30 @@ async function startServer() {
   useServer({ schema }, wsServer);
   httpServer.listen(PORT, () => {
     console.log(`🚀 Post/Comment Service (GraphQL) running on port ${PORT}`);
+    console.log(`GraphQL endpoint: http://localhost:${PORT}${server.graphqlPath}`);
     console.log(`Subscriptions ready at ws://localhost:${PORT}${server.graphqlPath}`);
   });
 }
-// ... (Health check dan Error handling tetap sama) ...
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    service: 'post-comment-graphql-api',
+    timestamp: new Date().toISOString(),
+    data: {
+      posts: posts.length,
+      comments: comments.length
+    }
+  });
+});
+
+// Error handling 
+app.use((err, req, res, next) => {
+  console.error('GraphQL API Error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 startServer().catch(error => {
   console.error('Failed to start GraphQL server:', error);
   process.exit(1);
