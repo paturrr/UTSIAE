@@ -140,9 +140,16 @@ const resolvers = {
       return newPost;
     },
 
-    updatePost: (_, { id, title, content }) => {
+    updatePost: (_, { id, title, content }, context) => {
+      if (!context.userId) {
+        throw new Error('Authentication required to update a post.');
+      }
       const postIndex = posts.findIndex(post => post.id === id);
       if (postIndex === -1) { throw new Error('Post not found'); }
+      const post = posts[postIndex];
+      if (post.author !== context.userName) {
+        throw new Error('Only the creator can edit this post.');
+      }
       const updatedPost = { ...posts[postIndex], ...(title && { title }), ...(content && { content }) };
       posts[postIndex] = updatedPost;
       pubsub.publish(POST_UPDATED, { postUpdated: updatedPost });
