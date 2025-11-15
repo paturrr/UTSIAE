@@ -63,10 +63,10 @@ getAuthPublicKey().catch(error => {
 const app = express();
 const pubsub = new PubSub();
 
-const POST_ADDED = 'POST_ADDED';
-const COMMENT_ADDED = 'COMMENT_ADDED';
-const POST_UPDATED = 'POST_UPDATED';
-const POST_DELETED = 'POST_DELETED';
+const TASK_CREATED = 'TASK_CREATED';
+const TASK_UPDATED = 'TASK_UPDATED';
+const TASK_DELETED = 'TASK_DELETED';
+const UPDATE_ADDED = 'UPDATE_ADDED';
 
 app.use(cors({
   origin: [
@@ -76,128 +76,144 @@ app.use(cors({
   credentials: true
 }));
 
-// === Database In-Memory ASLI (Posts/Comments) ===
-let posts = [
-  { id: '1', title: 'Welcome to Microservices Security', content: 'This post is secured by JWT passed through the API Gateway!', author: 'John Doe', createdAt: new Date().toISOString() },
-  { id: '2', title: 'Authentication is Working', content: 'Check the logs when you try to delete this post as a non-admin!', author: 'Jane Smith', createdAt: new Date().toISOString() }
+// === Database In-Memory (Tasks/Updates) ===
+let tasks = [
+  { id: '1', title: 'Prepare Sprint Planning', description: 'Draft the agenda and collect requirements for sprint planning.', owner: 'John Doe', status: 'OPEN', priority: 'HIGH', createdAt: new Date().toISOString() },
+  { id: '2', title: 'Implement Authentication', description: 'Connect frontend auth flow to REST user service.', owner: 'Jane Smith', status: 'IN_PROGRESS', priority: 'MEDIUM', createdAt: new Date().toISOString() }
 ];
-let comments = [
-  { id: '1', postId: '1', content: 'I am a secure comment!', author: 'John Doe', createdAt: new Date().toISOString() }
+let taskUpdates = [
+  { id: '1', taskId: '2', content: 'JWT gateway verification completed.', author: 'Jane Smith', createdAt: new Date().toISOString() }
 ];
-// ===============================================
+// ===========================================
 
-// === Skema GraphQL ASLI (Type Definitions) - DENGAN INPUT AUTHOR ===
+// === Skema GraphQL (Type Definitions) ===
 const typeDefs = `
-  type Post {
+  type Task {
     id: ID!
     title: String!
-    content: String!
-    author: String!
+    description: String!
+    owner: String!
+    status: String!
+    priority: String!
     createdAt: String!
-    comments: [Comment!]!
+    updates: [TaskUpdate!]!
   }
-  type Comment {
+  type TaskUpdate {
     id: ID!
-    postId: ID!
+    taskId: ID!
     content: String!
     author: String!
     createdAt: String!
   }
   type Query {
-    posts: [Post!]!
-    post(id: ID!): Post
-    comments(postId: ID!): [Comment!]!
+    tasks: [Task!]!
+    task(id: ID!): Task
+    taskUpdates(taskId: ID!): [TaskUpdate!]!
   }
   type Mutation {
-    createPost(title: String!, content: String!, author: String!): Post!
-    updatePost(id: ID!, title: String, content: String): Post!
-    deletePost(id: ID!): Boolean!
-    createComment(postId: ID!, content: String!, author: String!): Comment!
-    deleteComment(id: ID!): Boolean!
+    createTask(title: String!, description: String!, priority: String!, owner: String!): Task!
+    updateTask(id: ID!, title: String, description: String, status: String, priority: String): Task!
+    deleteTask(id: ID!): Boolean!
+    addTaskUpdate(taskId: ID!, content: String!, author: String!): TaskUpdate!
+    deleteTaskUpdate(id: ID!): Boolean!
   }
   type Subscription {
-    postAdded: Post!
-    commentAdded: Comment!
-    postUpdated: Post!
-    postDeleted: ID!
+    taskCreated: Task!
+    taskUpdated: Task!
+    taskDeleted: ID!
+    updateAdded: TaskUpdate!
   }
 `;
 
 // === Resolvers ASLI (dengan logika Role Admin) ===
 const resolvers = {
-  Query: { posts: () => posts, post: (_, { id }) => posts.find(post => post.id === id), comments: (_, { postId }) => comments.filter(comment => comment.postId === postId) },
-  Post: { comments: (parent) => comments.filter(comment => comment.postId === parent.id) },
+  Query: {
+    tasks: () => tasks,
+    task: (_, { id }) => tasks.find(task => task.id === id),
+    taskUpdates: (_, { taskId }) => taskUpdates.filter(update => update.taskId === taskId)
+  },
+  Task: {
+    updates: (parent) => taskUpdates.filter(update => update.taskId === parent.id)
+  },
 
   Mutation: {
-    // RESOLVER createPost - MENGAMBIL AUTHOR DARI INPUT
-    createPost: (_, { title, content, author }, context) => { // <-- AUTHOR DIKEMBALIKAN
-      const postAuthor = author;
-      if (!context.userId) { throw new Error('Authentication required to create a post.'); }
-
-      const newPost = { id: uuidv4(), title, content, author: postAuthor, createdAt: new Date().toISOString() };
-      posts.push(newPost);
-      pubsub.publish(POST_ADDED, { postAdded: newPost });
-      return newPost;
+    createTask: (_, { title, description, priority, owner }, context) => {
+      if (!context.userId) { throw new Error('Authentication required to create a task.'); }
+      const newTask = {
+        id: uuidv4(),
+        title,
+        description,
+        owner,
+        status: 'OPEN',
+        priority,
+        createdAt: new Date().toISOString()
+      };
+      tasks.push(newTask);
+      pubsub.publish(TASK_CREATED, { taskCreated: newTask });
+      return newTask;
     },
 
-    updatePost: (_, { id, title, content }, context) => {
+    updateTask: (_, { id, title, description, status, priority }, context) => {
       if (!context.userId) {
-        throw new Error('Authentication required to update a post.');
+        throw new Error('Authentication required to update a task.');
       }
-      const postIndex = posts.findIndex(post => post.id === id);
-      if (postIndex === -1) { throw new Error('Post not found'); }
-      const post = posts[postIndex];
-      if (post.author !== context.userName) {
-        throw new Error('Only the creator can edit this post.');
+      const taskIndex = tasks.findIndex(task => task.id === id);
+      if (taskIndex === -1) { throw new Error('Task not found'); }
+      const task = tasks[taskIndex];
+      if (task.owner !== context.userName) {
+        throw new Error('Only the creator can edit this task.');
       }
-      const updatedPost = { ...posts[postIndex], ...(title && { title }), ...(content && { content }) };
-      posts[postIndex] = updatedPost;
-      pubsub.publish(POST_UPDATED, { postUpdated: updatedPost });
-      return updatedPost;
+      const updatedTask = {
+        ...task,
+        ...(title && { title }),
+        ...(description && { description }),
+        ...(status && { status }),
+        ...(priority && { priority })
+      };
+      tasks[taskIndex] = updatedTask;
+      pubsub.publish(TASK_UPDATED, { taskUpdated: updatedTask });
+      return updatedTask;
     },
 
-    deletePost: (_, { id }, context) => {
-      const postIndex = posts.findIndex(post => post.id === id);
-      if (postIndex === -1) { return false; }
-      const post = posts[postIndex];
+    deleteTask: (_, { id }, context) => {
+      const taskIndex = tasks.findIndex(task => task.id === id);
+      if (taskIndex === -1) { return false; }
+      const task = tasks[taskIndex];
       
-      // LOGIKA HAK AKSES ADMIN
-      if (context.userRole === 'admin' || post.author === context.userName) {
-        comments = comments.filter(comment => comment.postId !== id);
-        posts.splice(postIndex, 1);
-        pubsub.publish(POST_DELETED, { postDeleted: id });
+      if (context.userRole === 'admin' || task.owner === context.userName) {
+        taskUpdates = taskUpdates.filter(update => update.taskId !== id);
+        tasks.splice(taskIndex, 1);
+        pubsub.publish(TASK_DELETED, { taskDeleted: id });
         return true;
       } else {
-        throw new Error('You are not authorized to delete this post.');
+        throw new Error('You are not authorized to delete this task.');
       }
     },
 
-    // RESOLVER createComment - MENGAMBIL AUTHOR DARI INPUT
-    createComment: (_, { postId, content, author }, context) => { // <-- AUTHOR DIKEMBALIKAN
-      const commentAuthor = author;
-      if (!context.userId) { throw new Error('Authentication required to comment.'); }
+    addTaskUpdate: (_, { taskId, content, author }, context) => {
+      if (!context.userId) { throw new Error('Authentication required to add updates.'); }
 
-      const post = posts.find(p => p.id === postId);
-      if (!post) { throw new Error('Post not found'); }
-      const newComment = { id: uuidv4(), postId, content, author: commentAuthor, createdAt: new Date().toISOString() };
-      comments.push(newComment);
-      pubsub.publish(COMMENT_ADDED, { commentAdded: newComment });
-      return newComment;
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) { throw new Error('Task not found'); }
+      const newUpdate = { id: uuidv4(), taskId, content, author, createdAt: new Date().toISOString() };
+      taskUpdates.push(newUpdate);
+      pubsub.publish(UPDATE_ADDED, { updateAdded: newUpdate });
+      return newUpdate;
     },
 
-    deleteComment: (_, { id }) => {
-      const commentIndex = comments.findIndex(comment => comment.id === id);
-      if (commentIndex === -1) { return false; }
-      comments.splice(commentIndex, 1);
+    deleteTaskUpdate: (_, { id }) => {
+      const updateIndex = taskUpdates.findIndex(update => update.id === id);
+      if (updateIndex === -1) { return false; }
+      taskUpdates.splice(updateIndex, 1);
       return true;
     },
   },
 
   Subscription: {
-    postAdded: { subscribe: () => pubsub.asyncIterator([POST_ADDED]) },
-    commentAdded: { subscribe: () => pubsub.asyncIterator([COMMENT_ADDED]) },
-    postUpdated: { subscribe: () => pubsub.asyncIterator([POST_UPDATED]) },
-    postDeleted: { subscribe: () => pubsub.asyncIterator([POST_DELETED]) },
+    taskCreated: { subscribe: () => pubsub.asyncIterator([TASK_CREATED]) },
+    taskUpdated: { subscribe: () => pubsub.asyncIterator([TASK_UPDATED]) },
+    taskDeleted: { subscribe: () => pubsub.asyncIterator([TASK_DELETED]) },
+    updateAdded: { subscribe: () => pubsub.asyncIterator([UPDATE_ADDED]) },
   },
 };
 

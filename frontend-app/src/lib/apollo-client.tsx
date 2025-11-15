@@ -7,16 +7,16 @@ const httpLink = createHttpLink({
   uri: process.env.NEXT_PUBLIC_GRAPHQL_URL || 'http://localhost:3000/graphql',
 });
 
-// === MODIFIKASI DI SINI ===
-// Modifikasi authLink untuk mengambil token dari localStorage
+// === AUTH HEADER SETUP ===
+// Inject the JWT from localStorage on every GraphQL request
 const authLink = setContext((_, { headers }) => {
-  // Ambil token dari local storage (sama seperti di api.ts)
+  // Read the token from localStorage (same logic as api.ts)
   const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
   
   return {
     headers: {
       ...headers,
-      // Tambahkan header authorization jika token ada
+      // Add the authorization header when a token is present
       authorization: token ? `Bearer ${token}` : "",
     }
   }
@@ -24,7 +24,7 @@ const authLink = setContext((_, { headers }) => {
 // =========================
 
 const client = new ApolloClient({
-  link: authLink.concat(httpLink), // Pastikan authLink dijalankan sebelum httpLink
+  link: authLink.concat(httpLink), // Ensure the authLink runs before httpLink
   cache: new InMemoryCache(),
   connectToDevTools: true,
 });

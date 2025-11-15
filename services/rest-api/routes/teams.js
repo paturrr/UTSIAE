@@ -2,25 +2,25 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
 
-// Database tim in-memory (sesuai dengan data di auth.js)
+// In-memory team database (aligned with data in auth.js)
 let teams = [
-  { id: 't1', name: 'Alpha Team', members: ['1', '2'] }, // '1' dan '2' adalah ID user dari global.users
+  { id: 't1', name: 'Alpha Team', members: ['1', '2'] }, // '1' and '2' match IDs in global.users
 ];
 
-// GET /api/teams - Dapatkan semua tim
+// GET /api/teams - Retrieve all teams
 router.get('/', (req, res) => {
-  // Nanti, endpoint ini akan dilindungi oleh Gateway.
-  // Kita bisa filter tim berdasarkan user ID dari token:
+  // Later this endpoint can be protected by the Gateway.
+  // Example: filter teams by user ID from the token
   // const userId = req.headers['x-user-id']; 
   
-  // Untuk saat ini, tampilkan semua tim
+  // For now return every team
   res.json(teams);
 });
 
-// POST /api/teams - Buat tim baru
+// POST /api/teams - Create a new team
 router.post('/', (req, res) => {
   const { name } = req.body;
-  // Nanti, kita dapatkan ID pembuat dari header:
+  // Later we can grab the creator ID from headers:
   // const userId = req.headers['x-user-id']; 
 
   if (!name) {
@@ -37,8 +37,8 @@ router.post('/', (req, res) => {
   res.status(201).json(newTeam);
 });
 
-// Anda bisa tambahkan endpoint lain nanti:
-// GET /api/teams/:id - Dapat 1 tim
-// POST /api/teams/:id/members - Tambah anggota
+// Additional endpoints can be added later:
+// GET /api/teams/:id - Get a single team
+// POST /api/teams/:id/members - Add a member
 
 module.exports = router;

@@ -1,4 +1,4 @@
-// frontend-app/src/lib/api.ts (Kode Lengkap)
+// frontend-app/src/lib/api.ts (Full Source)
 
 import axios from 'axios';
 
@@ -26,7 +26,7 @@ apiClient.interceptors.request.use(
 );
 // =========================
 
-// --- API Service untuk Autentikasi ---
+// --- Authentication API Service ---
 export const authApi = {
   login: (data: { email: string; password: any }) => 
     apiClient.post('/api/auth/login', data),
@@ -36,7 +36,7 @@ export const authApi = {
 };
 // ===========================================
 
-// User API calls (Dibutuhkan untuk Admin Panel)
+// User API calls (used by admin panel)
 export const userApi = {
   getUsers: () => apiClient.get('/api/users'),
   getUser: (id: string) => apiClient.get(`/api/users/${id}`),

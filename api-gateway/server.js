@@ -21,10 +21,10 @@ async function fetchPublicKey() {
   try {
     const response = await axios.get(`${USER_SERVICE_URL}/api/auth/public-key`);
     PUBLIC_KEY = response.data;
-    console.log('✅ Public Key berhasil diambil dari User Service.');
+    console.log('✅ Public key retrieved from User Service.');
   } catch (error) {
-    console.error('❌ Gagal mengambil Public Key:', error.message);
-    console.log('Mencoba lagi dalam 5 detik...');
+    console.error('❌ Failed to fetch public key:', error.message);
+    console.log('Retrying in 5 seconds...');
     setTimeout(fetchPublicKey, 5000); 
   }
 }
