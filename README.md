@@ -9,8 +9,8 @@ This project demonstrates a microservices architecture with:
 ## Architecture
 
 ```
-Frontend (Next.js) → API Gateway → REST API Service
-                                → GraphQL API Service
+Frontend (Next.js) +--> API Gateway +--> REST API Service
+                        \-> GraphQL API Service
 ```
 
 ## Services
@@ -99,7 +99,7 @@ Simply double-click `start.bat` and choose an option from the menu!
 - Frontend: http://localhost:3002
 - API Gateway: http://localhost:3000
 - REST API: http://localhost:3001
-- GraphQL API: http://localhost:4000/graphql
+- GraphQL API: http://localhost:3000/graphql
 
 ## API Examples
 
@@ -168,39 +168,36 @@ subscription {
 ### API Gateway
 - `PORT`: Server port (default: 3000)
 - `REST_API_URL`: REST API service URL (default: http://localhost:3001)
-- `GRAPHQL_API_URL`: GraphQL API service URL (default: http://localhost:4000)
+- `GRAPHQL_API_URL`: GraphQL API service URL (default: http://localhost:3000)
 
 ### Frontend
 - `NEXT_PUBLIC_API_GATEWAY_URL`: API Gateway URL (default: http://localhost:3000)
-- `NEXT_PUBLIC_GRAPHQL_URL`: GraphQL endpoint URL (default: http://localhost:4000/graphql)
+- `NEXT_PUBLIC_GRAPHQL_URL`: GraphQL endpoint URL (default: http://localhost:3000/graphql)
 
 ## Project Structure
 
 ```
 more-complex/
-├── api-gateway/                # API Gateway service
-│   ├── package.json
-│   ├── server.js
-│   └── Dockerfile
-├── services/
-│   ├── rest-api/              # REST API service
-│   │   ├── package.json
-│   │   ├── server.js
-│   │   ├── middleware/
-│   │   ├── routes/
-│   │   └── Dockerfile
-│   └── graphql-api/           # GraphQL API service
-│       ├── package.json
-│       ├── server.js
-│       └── Dockerfile
-├── frontend-app/              # Next.js frontend
-│   ├── package.json
-│   ├── next.config.js
-│   ├── src/
-│   └── Dockerfile
-├── docker-compose.yml         # Production compose
-├── docker-compose.dev.yml     # Development compose
-└── package.json              # Root package.json
++-- api-gateway/                # API Gateway service
+�   +-- package.json
+�   +-- server.js
+�   +-- Dockerfile
++-- services/
+�   +-- rest-api/              # REST API service
+�   �   +-- package.json
+�   �   +-- server.js
+�   �   +-- middleware/
+�   �   +-- routes/
+�   +-- graphql-api/           # GraphQL API service
+�       +-- package.json
+�       +-- server.js
++-- frontend-app/              # Next.js frontend
+�   +-- package.json
+�   +-- next.config.js
+�   +-- src/
++-- docker-compose.yml         # Production compose
++-- docker-compose.dev.yml     # Development compose
++-- package.json               # Root package.json
 ```
 
 ## Development Notes

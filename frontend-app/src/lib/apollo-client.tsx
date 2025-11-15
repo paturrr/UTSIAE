@@ -4,7 +4,7 @@ import { ApolloClient, InMemoryCache, ApolloProvider, createHttpLink } from '@ap
 import { setContext } from '@apollo/client/link/context';
 
 const httpLink = createHttpLink({
-  uri: process.env.NEXT_PUBLIC_GRAPHQL_URL || 'http://localhost:4000/graphql',
+  uri: process.env.NEXT_PUBLIC_GRAPHQL_URL || 'http://localhost:3000/graphql',
 });
 
 // === MODIFIKASI DI SINI ===
@@ -26,6 +26,7 @@ const authLink = setContext((_, { headers }) => {
 const client = new ApolloClient({
   link: authLink.concat(httpLink), // Pastikan authLink dijalankan sebelum httpLink
   cache: new InMemoryCache(),
+  connectToDevTools: true,
 });
 
 export function ApolloWrapper({ children }: { children: React.ReactNode }) {

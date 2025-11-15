@@ -28,6 +28,14 @@ const CREATE_POST = gql`
   }
 `;
 
+const CREATE_COMMENT = gql`
+  mutation CreateComment($postId: ID!, $content: String!, $author: String!) {
+    createComment(postId: $postId, content: $content, author: $author) {
+      id, content, author, postId
+    }
+  }
+`;
+
 const DELETE_POST = gql`
   mutation DeletePost($id: ID!) {
     deletePost(id: $id)
@@ -164,9 +172,11 @@ function DashboardComponent({ onLogout }: { onLogout: () => void }) {
   const { data: postsData, loading: postsLoading, error: postsError, refetch: refetchPosts } = useQuery(GET_POSTS);
   
   const [createPost] = useMutation(CREATE_POST, { refetchQueries: [GET_POSTS] });
+  const [createComment] = useMutation(CREATE_COMMENT, { refetchQueries: [GET_POSTS] });
   const [deletePost] = useMutation(DELETE_POST, { refetchQueries: [GET_POSTS] }); 
 
   const [newPost, setNewPost] = useState({ title: '', content: '' });
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
   const [userData, setUserData] = useState<{ name: string, role: string } | null>(null);
   useEffect(() => {
@@ -177,6 +187,10 @@ function DashboardComponent({ onLogout }: { onLogout: () => void }) {
 
   const handlePostChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setNewPost({ ...newPost, [e.target.name]: e.target.value });
+  };
+
+  const handleCommentInputChange = (postId: string, value: string) => {
+    setCommentInputs(prev => ({ ...prev, [postId]: value }));
   };
 
   const handleCreatePost = async (e: React.FormEvent) => {
@@ -202,6 +216,24 @@ function DashboardComponent({ onLogout }: { onLogout: () => void }) {
       } catch (err: any) {
         alert('Gagal menghapus post: ' + err.message);
       }
+    }
+  };
+
+  const handleCreateComment = async (postId: string) => {
+    const content = (commentInputs[postId] || '').trim();
+    if (!content) return;
+
+    try {
+      await createComment({
+        variables: {
+          postId,
+          content,
+          author: userName,
+        },
+      });
+      setCommentInputs(prev => ({ ...prev, [postId]: '' }));
+    } catch (err: any) {
+      alert('Gagal menambahkan komentar: ' + (err.message || 'Unknown error'));
     }
   };
 
@@ -272,6 +304,21 @@ function DashboardComponent({ onLogout }: { onLogout: () => void }) {
                   </div>
                 ))}
                 {post.comments.length === 0 && <p className="text-sm text-gray-500">No comments yet.</p>}
+              </div>
+              <div className="mt-4 space-y-2">
+                <textarea
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  placeholder="Tulis komentar..."
+                  value={commentInputs[post.id] || ''}
+                  onChange={(e) => handleCommentInputChange(post.id, e.target.value)}
+                />
+                <button
+                  onClick={() => handleCreateComment(post.id)}
+                  disabled={!(commentInputs[post.id] || '').trim()}
+                  className="bg-green-500 text-white px-4 py-2 rounded-md text-sm hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Tambah Komentar
+                </button>
               </div>
             </div>
           </div>

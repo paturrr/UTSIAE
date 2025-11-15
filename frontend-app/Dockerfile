@@ -11,6 +11,8 @@ FROM node:18-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Ensure public directory exists even if repo doesn't ship assets
+RUN mkdir -p public
 
 # Disable telemetry during build
 ENV NEXT_TELEMETRY_DISABLED 1
