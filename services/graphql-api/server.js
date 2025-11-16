@@ -1,5 +1,3 @@
-// services/graphql-api/server.js (Kode Lengkap & Stabil)
-
 const express = require('express');
 const { ApolloServer } = require('apollo-server-express');
 const { PubSub } = require('graphql-subscriptions');
@@ -8,12 +6,10 @@ const cors = require('cors');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 
-// --- Impor untuk FIX Subscription ---
 const { createServer } = require('http');
 const { WebSocketServer } = require('ws');
 const { useServer } = require('graphql-ws/lib/use/ws');
 const { makeExecutableSchema } = require('@graphql-tools/schema');
-// ------------------------------------
 
 const AUTH_PUBLIC_KEY_URL = process.env.AUTH_PUBLIC_KEY_URL;
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL;
@@ -76,7 +72,6 @@ app.use(cors({
   credentials: true
 }));
 
-// === Database In-Memory (Tasks/Updates) ===
 let tasks = [
   { id: '1', title: 'Prepare Sprint Planning', description: 'Draft the agenda and collect requirements for sprint planning.', owner: 'John Doe', status: 'OPEN', priority: 'HIGH', createdAt: new Date().toISOString() },
   { id: '2', title: 'Implement Authentication', description: 'Connect frontend auth flow to REST user service.', owner: 'Jane Smith', status: 'IN_PROGRESS', priority: 'MEDIUM', createdAt: new Date().toISOString() }
@@ -84,9 +79,6 @@ let tasks = [
 let taskUpdates = [
   { id: '1', taskId: '2', content: 'JWT gateway verification completed.', author: 'Jane Smith', createdAt: new Date().toISOString() }
 ];
-// ===========================================
-
-// === Skema GraphQL (Type Definitions) ===
 const typeDefs = `
   type Task {
     id: ID!
@@ -125,7 +117,6 @@ const typeDefs = `
   }
 `;
 
-// === Resolvers ASLI (dengan logika Role Admin) ===
 const resolvers = {
   Query: {
     tasks: () => tasks,
@@ -223,7 +214,6 @@ async function startServer() {
   const server = new ApolloServer({
     schema,
     context: async ({ req }) => {
-      // Membaca header yang disuntikkan Gateway, termasuk fallback decode token langsung
       let userId = req.headers['x-user-id'] || '';
       let userName = req.headers['x-user-name'] || 'Guest';
       let userEmail = req.headers['x-user-email'] || '';
@@ -252,7 +242,6 @@ async function startServer() {
 
       return { userId, userName, userEmail, userTeams, userRole, req };
     },
-    // ... (plugins) ...
   });
 
   await server.start();
@@ -260,7 +249,6 @@ async function startServer() {
 
   const PORT = process.env.PORT || 4000;
   
-  // FIX: Setup Subscription yang Benar
   const httpServer = createServer(app);
   const wsServer = new WebSocketServer({ server: httpServer, path: server.graphqlPath });
   useServer({ schema }, wsServer);
@@ -271,7 +259,6 @@ async function startServer() {
   });
 }
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -284,7 +271,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handling
 app.use((err, req, res, next) => {
   console.error('GraphQL API Error:', err);
   res.status(500).json({ error: 'Internal server error' });

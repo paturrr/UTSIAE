@@ -1,12 +1,10 @@
-// api-gateway/server.js (Kode Lengkap)
-
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const jwt = require('jsonwebtoken'); 
-const axios = require('axios'); 
+const jwt = require('jsonwebtoken');
+const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
@@ -25,11 +23,10 @@ async function fetchPublicKey() {
   } catch (error) {
     console.error('❌ Failed to fetch public key:', error.message);
     console.log('Retrying in 5 seconds...');
-    setTimeout(fetchPublicKey, 5000); 
+    setTimeout(fetchPublicKey, 5000);
   }
 }
 
-// Security middleware
 app.use(helmet());
 app.use(cors({
   origin: ['http://localhost:3002', 'http://frontend-app:3002'],
@@ -45,7 +42,6 @@ app.get('/health', (req, res) => {
 });
 
 
-// === MIDDLEWARE AUTHENTICATION (SATPAM) ===
 app.use(async (req, res, next) => {
   
   const publicRoutes = [
@@ -55,7 +51,7 @@ app.use(async (req, res, next) => {
   ];
 
   if (publicRoutes.includes(req.path)) {
-    return next(); 
+    return next();
   }
 
   if (!PUBLIC_KEY) {
@@ -63,38 +59,34 @@ app.use(async (req, res, next) => {
   }
 
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; 
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (token == null) {
     return res.status(401).json({ error: 'Unauthorized: No token provided.' });
   }
 
-  // PERBAIKAN KRITIKAL: Algoritma harus RS256
-  jwt.verify(token, PUBLIC_KEY, { algorithms: ['RS256'] }, (err, decoded) => { // <-- FIXED
+  jwt.verify(token, PUBLIC_KEY, { algorithms: ['RS256'] }, (err, decoded) => {
     if (err) {
       console.error('JWT Verify Error:', err.message);
       return res.status(401).json({ error: 'Unauthorized: Invalid token.' });
     }
 
-    // Token valid! Suntikkan data ke header
     req.headers['x-user-id'] = decoded.userId;
     req.headers['x-user-name'] = decoded.name;
     req.headers['x-user-email'] = decoded.email;
-    req.headers['x-user-role'] = decoded.role; // <-- ROLE DIKIRIM KE BACKEND
-    req.headers['x-user-teams'] = (decoded.teams || []).join(','); 
+    req.headers['x-user-role'] = decoded.role;
+    req.headers['x-user-teams'] = (decoded.teams || []).join(',');
 
-    next(); 
+    next();
   });
 });
-// ==========================================
 
 
-// Proxy configuration for REST API (User Service)
 const restApiProxy = createProxyMiddleware({
   target: USER_SERVICE_URL,
   changeOrigin: true,
   pathRewrite: {
-    '^/api': '/api', 
+    '^/api': '/api',
   },
   onProxyReq: (proxyReq, req, res) => {
     console.log(`[Gateway] -> REST: ${req.method} ${req.url}`);
@@ -105,11 +97,10 @@ const restApiProxy = createProxyMiddleware({
   }
 });
 
-// Proxy configuration for GraphQL API (Task Service)
 const graphqlApiProxy = createProxyMiddleware({
   target: GRAPHQL_API_URL,
   changeOrigin: true,
-  ws: true, 
+  ws: true,
   onProxyReq: (proxyReq, req, res) => {
     console.log(`[Gateway] -> GQL: ${req.method} ${req.url}`);
   },
@@ -119,8 +110,8 @@ const graphqlApiProxy = createProxyMiddleware({
   }
 });
 
-app.use('/api', restApiProxy); 
-app.use('/graphql', graphqlApiProxy); 
+app.use('/api', restApiProxy);
+app.use('/graphql', graphqlApiProxy);
 
 app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found on Gateway' });

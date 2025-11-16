@@ -4,10 +4,7 @@
 
 body {
   @apply bg-gray-950 text-gray-100;
-  background-image:
-    radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.25), transparent 35%),
-    radial-gradient(circle at 80% 0%, rgba(236, 72, 153, 0.2), transparent 40%),
-    linear-gradient(135deg, #050505, #111827 60%, #050505);
+  background-color: #0f172a;
   min-height: 100vh;
   font-feature-settings: "liga" 1, "calt" 1;
 }
